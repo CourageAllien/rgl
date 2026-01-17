@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Prospects (companies/contacts)
+model Prospect {
+  id            String   @id @default(cuid())
+  name          String   // Contact name
+  email         String
+  phone         String?
+  company       String   // Company name
+  website       String?
+  logoUrl       String?  // Auto-fetched company logo
+  industry      String?
+  companySize   String?  // e.g., "1-10", "11-50", "51-200"
+  notes         String?  @db.Text
+  
+  rooms         SalesRoom[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("prospects")
+}
+
+// Package templates for pricing
+model Package {
+  id            String   @id @default(cuid())
+  name          String   // e.g., "Lead Gen Starter"
+  price         Int      // Monthly price in cents
+  description   String?  @db.Text
+  features      Json     // Array of feature strings
+  deliverables  Json     // Array of deliverable items
+  isPopular     Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  displayOrder  Int      @default(0)
+  
+  rooms         SalesRoom[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("packages")
+}
+
+// Contract templates
+model ContractTemplate {
+  id            String   @id @default(cuid())
+  name          String   // e.g., "Standard Monthly"
+  htmlContent   String   @db.Text // HTML with merge fields like {{company}}, {{price}}
+  isDefault     Boolean  @default(false)
+  
+  rooms         SalesRoom[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("contract_templates")
+}
+
+// Sales Rooms
+model SalesRoom {
+  id                  String     @id @default(cuid())
+  slug                String     @unique // URL path
+  
+  // Prospect relationship
+  prospectId          String
+  prospect            Prospect   @relation(fields: [prospectId], references: [id])
+  
+  // Package (optional - can be custom)
+  packageId           String?
+  package             Package?   @relation(fields: [packageId], references: [id])
+  customPrice         Int?       // Override price in cents (monthly)
+  customFeatures      Json?      // Custom features array
+  
+  // Contract
+  contractTemplateId  String?
+  contractTemplate    ContractTemplate? @relation(fields: [contractTemplateId], references: [id])
+  contractHtml        String?    @db.Text // Rendered contract
+  
+  // Meeting details
+  meetingDate         DateTime?
+  meetingNotes        String?    @db.Text // Raw notes or transcript
+  meetingRecap        String?    @db.Text // AI-generated recap
+  keyPoints           Json?      // Array of key discussion points
+  nextSteps           Json?      // Array of next steps
+  
+  // Room content
+  title               String     // Room title
+  introMessage        String?    @db.Text // Personalized intro
+  additionalContent   Json?      // Flexible content blocks
+  
+  // Status & lifecycle
+  status              RoomStatus @default(DRAFT)
+  expiresAt           DateTime?
+  sentAt              DateTime?
+  viewedAt            DateTime?
+  signedAt            DateTime?
+  paidAt              DateTime?
+  
+  // Signature
+  signatureData       String?    @db.Text // Base64 signature image
+  signerName          String?
+  signerTitle         String?
+  signedIpAddress     String?
+  
+  // Payment
+  stripeSessionId     String?
+  stripePaymentIntentId String?
+  paidAmount          Int?       // Amount paid in cents
+  paymentType         PaymentType?
+  
+  // Analytics
+  views               RoomView[]
+  
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  @@map("sales_rooms")
+}
+
+// Room view analytics
+model RoomView {
+  id            String     @id @default(cuid())
+  roomId        String
+  room          SalesRoom  @relation(fields: [roomId], references: [id])
+  
+  // Tracking
+  viewedAt      DateTime   @default(now())
+  duration      Int?       // Seconds on page
+  pagesViewed   Json?      // Which pages they viewed
+  scrollDepth   Int?       // Percentage
+  ipAddress     String?
+  userAgent     String?
+  referrer      String?
+  
+  @@map("room_views")
+}
+
+// Notifications sent
+model Notification {
+  id            String     @id @default(cuid())
+  type          NotificationType
+  roomId        String?
+  recipientEmail String?
+  channel       NotificationChannel
+  sentAt        DateTime   @default(now())
+  metadata      Json?
+  
+  @@map("notifications")
+}
+
+enum RoomStatus {
+  DRAFT
+  SENT
+  VIEWED
+  SIGNED
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentType {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  ONE_TIME
+}
+
+enum NotificationType {
+  ROOM_CREATED
+  ROOM_SENT
+  ROOM_VIEWED
+  ROOM_SIGNED
+  ROOM_PAID
+  ROOM_EXPIRED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SLACK
+}
