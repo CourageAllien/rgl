@@ -1,47 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
 import Stripe from 'stripe'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
-})
+// Initialize Stripe only if the key exists
+const getStripe = () => {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return null
+  }
+  return new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: '2025-12-15.clover',
+  })
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { roomId, successUrl, cancelUrl } = body
-
-    // Get room with package details
-    const room = await prisma.salesRoom.findUnique({
-      where: { id: roomId },
-      include: {
-        prospect: true,
-        package: true,
-      }
-    })
-
-    if (!room) {
-      return NextResponse.json({ error: 'Room not found' }, { status: 404 })
+    const stripe = getStripe()
+    if (!stripe) {
+      return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 })
     }
 
-    // Calculate price
-    const price = room.customPrice || room.package?.price || 0
-    const productName = room.package?.name || 'RevGen Labs Services'
+    const body = await request.json()
+    const { roomId, successUrl, cancelUrl, price, productName, customerEmail, company, slug } = body
 
     // Create Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      mode: 'subscription', // or 'payment' for one-time
-      customer_email: room.prospect.email,
+      mode: 'subscription',
+      customer_email: customerEmail,
       line_items: [
         {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: productName,
-              description: `Monthly subscription for ${room.prospect.company}`,
+              name: productName || 'RevGen Labs Services',
+              description: `Monthly subscription for ${company}`,
             },
-            unit_amount: price,
+            unit_amount: price || 499900,
             recurring: {
               interval: 'month',
             },
@@ -49,19 +42,12 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: successUrl || `${process.env.NEXT_PUBLIC_APP_URL}/r/${room.slug}?success=true`,
-      cancel_url: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL}/r/${room.slug}?canceled=true`,
+      success_url: successUrl || `${process.env.NEXT_PUBLIC_APP_URL}/r/${slug}?success=true`,
+      cancel_url: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL}/r/${slug}?canceled=true`,
       metadata: {
-        roomId: room.id,
-        prospectId: room.prospectId,
-        company: room.prospect.company,
+        roomId,
+        company,
       },
-    })
-
-    // Update room with session ID
-    await prisma.salesRoom.update({
-      where: { id: roomId },
-      data: { stripeSessionId: session.id }
     })
 
     return NextResponse.json({ sessionId: session.id, url: session.url })

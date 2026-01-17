@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import OpenAI from 'openai'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Dynamically import OpenAI only when needed
+const getOpenAI = async () => {
+  if (!process.env.OPENAI_API_KEY) {
+    return null
+  }
+  const { default: OpenAI } = await import('openai')
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { company, contactName, meetingNotes, keyPoints, industry } = body
 
-    if (!process.env.OPENAI_API_KEY) {
+    const openai = await getOpenAI()
+    
+    if (!openai) {
       // Return a template if no API key
       return NextResponse.json({
         recap: generateTemplateRecap(company, contactName, meetingNotes)
@@ -59,10 +65,16 @@ Keep it professional but personable. About 300-400 words.`
     console.error('Error generating recap:', error)
     
     // Fallback to template
-    const body = await request.json()
-    return NextResponse.json({
-      recap: generateTemplateRecap(body.company, body.contactName, body.meetingNotes)
-    })
+    try {
+      const body = await request.json()
+      return NextResponse.json({
+        recap: generateTemplateRecap(body.company, body.contactName, body.meetingNotes)
+      })
+    } catch {
+      return NextResponse.json({
+        recap: generateTemplateRecap('Your Company', 'Valued Client', '')
+      })
+    }
   }
 }
 

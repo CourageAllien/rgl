@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -104,7 +104,7 @@ interface Room {
   customMessage: string
 }
 
-export default function CreateRoomPage() {
+function CreateRoomContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const templateId = searchParams.get('template')
@@ -986,5 +986,25 @@ export default function CreateRoomPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function LoadingFallback() {
+  return (
+    <div style={{ minHeight: '100vh', background: '#09090b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ width: '40px', height: '40px', border: '3px solid #27272a', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+        <p style={{ color: '#71717a', fontSize: '14px' }}>Loading...</p>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
+}
+
+export default function CreateRoomPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <CreateRoomContent />
+    </Suspense>
   )
 }
